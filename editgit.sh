@@ -101,9 +101,21 @@ copy ()
     done
 }
 
+get_commit_date ()
+{
+    DATE="$(exec_git "$CURRENT_WORK_TREE" show "$COMMIT" | grep -m1 '^Date:')"
+    DATE="${DATE#*[[:blank:]]}"
+    DATE="${DATE#*"${DATE%%[![:blank:]]*}"}"
+    TIME="${DATE%%[[:blank:]]*}"
+    DATE="${DATE##*[[:blank:]]}"
+    echo "DATE: $DATE"
+    echo "TIME: $TIME"
+}
+
 get_list_commit "$CURRENT_WORK_TREE" | tac | while read -r COMMIT
 do
     echo "commit: $COMMIT"
     exec_git "$CURRENT_WORK_TREE" reset --hard "$COMMIT"
+    get_commit_date
     copy
 done
