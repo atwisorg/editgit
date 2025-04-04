@@ -112,6 +112,13 @@ get_commit_date ()
     echo "TIME: $TIME"
 }
 
+ntp_service ()
+{
+    timedatectl set-ntp "$1"
+}
+
+ntp_service 0
+
 get_list_commit "$CURRENT_WORK_TREE" | tac | while read -r COMMIT
 do
     echo "commit: $COMMIT"
@@ -119,3 +126,5 @@ do
     get_commit_date
     copy
 done
+
+ntp_service 1
