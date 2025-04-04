@@ -62,12 +62,48 @@ test -e "${NEW_WORK_TREE:="${CURRENT_WORK_TREE}_editgit"}" && {
 
 git init "$NEW_WORK_TREE"
 
+exec_git () {
+    WORK_TREE="$1"
+    shift
+    git --work-tree="$WORK_TREE" --git-dir="$WORK_TREE/.git" "$@"
+}
+
 get_list_commit ()
 {
-    git log | \
+    exec_git "$1" log | \
     grep --color=never '^[[:cntrl:]]\[33mcommit[^[:cntrl:]]\+[[:cntrl:]]\[m' | \
     sed 's/\(^[[:cntrl:]]\[33m\|[[:cntrl:]]\[m$\)//g' | \
     awk '{print $2}'
 }
 
-GIT_DIR="$CURRENT_WORK_TREE/.git" get_list_commit
+
+exec_cp ()
+{
+    cp -vpPr -- "$@"
+}
+
+copy ()
+{
+    for i in "$CURRENT_WORK_TREE"/.*
+    do
+        test -e "$i" &&
+        case "$i" in
+            */.|*/..|*/.git)
+                ;;
+            *)
+                exec_cp "$i" "$NEW_WORK_TREE/"
+        esac
+    done
+
+    for i in "$CURRENT_WORK_TREE"/*
+    do
+        test -e "$i" && exec_cp "$i" "$NEW_WORK_TREE/"
+    done
+}
+
+get_list_commit "$CURRENT_WORK_TREE" | tac | while read -r COMMIT
+do
+    echo "commit: $COMMIT"
+    exec_git "$CURRENT_WORK_TREE" reset --hard "$COMMIT"
+    copy
+done
