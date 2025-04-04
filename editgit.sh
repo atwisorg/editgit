@@ -101,15 +101,32 @@ copy ()
     done
 }
 
+get_commit_body ()
+{
+    COMMIT_BODY="$(exec_git "$CURRENT_WORK_TREE" show "$COMMIT")"
+}
+
 get_commit_date ()
 {
-    DATE="$(exec_git "$CURRENT_WORK_TREE" show "$COMMIT" | grep -m1 '^Date:')"
+    DATE="$(echo "$COMMIT_BODY" | grep -m1 '^Date:')"
     DATE="${DATE#*[[:blank:]]}"
     DATE="${DATE#*"${DATE%%[![:blank:]]*}"}"
     TIME="${DATE%%[[:blank:]]*}"
     DATE="${DATE##*[[:blank:]]}"
     echo "DATE: $DATE"
     echo "TIME: $TIME"
+}
+
+get_commit_message ()
+{
+    COMMIT_MESSAGE="$(echo "$COMMIT_BODY" | \
+    sed -n '/^Date:/,/^\([[:cntrl:]]\[[0-9;]\+m\)*diff/p' | \
+    sed '1,2d; $d' | sed '$d' | sed 's/^ \{4\}//')"
+    COMMIT_TITLE="$(echo "$COMMIT_MESSAGE" | head -1)"
+    COMMIT_MESSAGE="$(echo "$COMMIT_MESSAGE" | sed '1,2d')"
+    COMMIT_MESSAGE="$(echo "$COMMIT_MESSAGE" | sed '/^Signed-off-by/d')"
+    echo "COMMIT_TITLE: $COMMIT_TITLE"
+    echo "COMMIT_MESSAGE: $COMMIT_MESSAGE"
 }
 
 set_commit_date ()
@@ -128,9 +145,13 @@ get_list_commit "$CURRENT_WORK_TREE" | tac | while read -r COMMIT
 do
     echo "commit: $COMMIT"
     exec_git "$CURRENT_WORK_TREE" reset --hard "$COMMIT"
+    get_commit_body
     get_commit_date
+    get_commit_message
     copy
     set_commit_date
+    exec_git "$NEW_WORK_TREE" add -A
+    exec_git "$NEW_WORK_TREE" commit -sm "$COMMIT_TITLE"
 done
 
 ntp_service 1
