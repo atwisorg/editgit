@@ -112,6 +112,11 @@ get_commit_date ()
     echo "TIME: $TIME"
 }
 
+set_commit_date ()
+{
+    timedatectl set-time "$DATE $TIME"
+}
+
 ntp_service ()
 {
     timedatectl set-ntp "$1"
@@ -125,6 +130,7 @@ do
     exec_git "$CURRENT_WORK_TREE" reset --hard "$COMMIT"
     get_commit_date
     copy
+    set_commit_date
 done
 
 ntp_service 1
