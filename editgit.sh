@@ -117,8 +117,9 @@ get_commit ()
 
     GPG="$(exec_git "$CURRENT_WORK_TREE" show -s --format=%GG "$COMMIT")"
     test -z "${GPG:-}" || {
-        GPG_DATE="$(echo "$GPG" | head -1)"
-        GPG_DATE="$(echo "$GPG" | cut -d' ' -f4-)"
+        GPG_DATE="$(echo    "$GPG"      | head -1)"
+        GPG_DATE="$(echo    "$GPG_DATE" | cut -d' ' -f4-9)"
+        GPG_DATE="$(date -d "$GPG_DATE" "+%Y-%m-%d %T")"
     }
 }
 
