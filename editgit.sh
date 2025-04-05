@@ -50,7 +50,7 @@ $PKG home page: <https://www.atwis.org/shell-script/$PKG/>"
 }
 
 show_version () {
-    echo "${0##*/} ${1:-0.0.2} - (C) 05.04.2025
+    echo "${0##*/} ${1:-0.0.3} - (C) 06.04.2025
 
 Written by Mironov A Semyon
 Site       www.atwis.org
@@ -69,7 +69,7 @@ say () {
 }
 
 get_rc () {
-    RETURN=$?
+    RETURN="$?"
     case "${1:-}" in
         *[!0-9]*|"")
             ;;
@@ -123,6 +123,11 @@ is_dir () {
 
 is_exists () {
     test -e "${1:-}"
+}
+
+abs_path ()
+{
+    cd -- "$1" 2>&1 && pwd -P 2>&1
 }
 
 arg_is_not_empty () {
@@ -214,23 +219,6 @@ arg_parse () {
     done
 }
 
-check_args ()
-{
-    is_not_empty "${SRC_WORK_TREE:="${GIT_WORK_TREE:-}"}" ||
-        try 2 "'SRC_WORK_TREE' is not set"
-    SRC_WORK_TREE="$(cd -- "$SRC_WORK_TREE" 2>&1 && pwd -P 2>&1)" ||
-        die "$SRC_WORK_TREE"
-
-    is_exists "${TRG_WORK_TREE:="${SRC_WORK_TREE}_editgit"}"  ||
-        TRG_WORK_TREE="$(mkdir -vp -- "$TRG_WORK_TREE" 2>&1)" ||
-            die "$TRG_WORK_TREE"
-
-    TRG_WORK_TREE="$(cd -- "$TRG_WORK_TREE" 2>&1 && pwd -P 2>&1)" ||
-        die "$TRG_WORK_TREE"
-
-    unset -v "GIT_WORK_TREE"
-}
-
 main ()
 {
     arg_parse "$@"
@@ -240,23 +228,57 @@ main ()
     
     check_args
 
-    git init "$TRG_WORK_TREE"
-
     ntp_service off
-
     get_list_commit "$SRC_WORK_TREE" | while read -r COMMIT
     do
         (
             echo "commit: $COMMIT"
-            exec_git "$SRC_WORK_TREE" reset --hard "$COMMIT"
+            exec_git   "$SRC_WORK_TREE" reset --hard "$COMMIT"
             get_commit "$COMMIT"
             copy       "$SRC_WORK_TREE" "$TRG_WORK_TREE"
             set_date   "$GPG_DATE"
             git_commit "$TRG_WORK_TREE"
         )
     done
-
     ntp_service on
+}
+
+check_args ()
+{
+    is_not_empty "${SRC_WORK_TREE:="${GIT_WORK_TREE:-}"}" ||
+    try 2 "'SRC_WORK_TREE' is not set"
+    SRC_WORK_TREE="$(abs_path "$SRC_WORK_TREE")" || die "$SRC_WORK_TREE"
+    unset -v "GIT_WORK_TREE"
+    WORK_TREE="$(exec_git "$SRC_WORK_TREE" status 2>&1)" || die "$WORK_TREE"
+    working_tree_clean source "$SRC_WORK_TREE"
+
+    if is_exists "${TRG_WORK_TREE:="${SRC_WORK_TREE}_editgit"}"
+    then
+        TRG_WORK_TREE="$(abs_path "$TRG_WORK_TREE")" || die "$TRG_WORK_TREE"
+        WORK_TREE="$(exec_git "$TRG_WORK_TREE" status 2>&1)" &&
+        working_tree_clean target "$TRG_WORK_TREE" || git init "$TRG_WORK_TREE"
+    else
+        TRG_WORK_TREE="$(mkdir -vp -- "$TRG_WORK_TREE" 2>&1)" &&
+        say "$TRG_WORK_TREE" || die "$TRG_WORK_TREE"
+        TRG_WORK_TREE="$(abs_path "$TRG_WORK_TREE")" || die "$TRG_WORK_TREE"
+        git init "$TRG_WORK_TREE"
+    fi
+}
+
+exec_git () {
+    WORK_TREE="$1"
+    shift
+    git --work-tree="$WORK_TREE" --git-dir="$WORK_TREE/.git" "$@"
+}
+
+working_tree_clean ()
+{
+    echo "$WORK_TREE" | grep 'nothing to commit' >/dev/null 2>&1 || {
+        RETURN="$?"
+        say "state of the $1 working tree of the repository: '$2'" >&2
+        echo "$WORK_TREE" >&2
+        die "$RETURN"
+    }
 }
 
 ntp_service ()
@@ -276,12 +298,6 @@ get_list_commit ()
     grep --color=never '^[[:cntrl:]]\[33mcommit[^[:cntrl:]]\+[[:cntrl:]]\[m' | \
     sed 's/\(^[[:cntrl:]]\[33m\|[[:cntrl:]]\[m$\)//g' | \
     awk '{print $2}'
-}
-
-exec_git () {
-    WORK_TREE="$1"
-    shift
-    git --work-tree="$WORK_TREE" --git-dir="$WORK_TREE/.git" "$@"
 }
 
 get_commit ()
