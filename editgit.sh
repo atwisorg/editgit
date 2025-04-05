@@ -22,20 +22,20 @@ while test $# -gt 0
 do
     case "${1:-}" in
         -g)
-            CURRENT_WORK_TREE="$2"
+            SRC_WORK_TREE="$2"
             shift
             ;;
         -n)
-            NEW_WORK_TREE="$2"
+            TRG_WORK_TREE="$2"
             shift
             ;;
         *)
-            if test -z "${CURRENT_WORK_TREE:-}"
+            if test -z "${SRC_WORK_TREE:-}"
             then
-                CURRENT_WORK_TREE="$1"
-            elif test -z "${NEW_WORK_TREE:-}"
+                SRC_WORK_TREE="$1"
+            elif test -z "${TRG_WORK_TREE:-}"
             then
-                NEW_WORK_TREE="$1"
+                TRG_WORK_TREE="$1"
             else
                 echo "invalid argument: '$1'"
                 exit 1
@@ -44,23 +44,23 @@ do
     shift
 done
 
-test "${CURRENT_WORK_TREE:-}" && {
-    CURRENT_WORK_TREE="$(cd -- "$CURRENT_WORK_TREE" && pwd -P)"
+test "${SRC_WORK_TREE:-}" && {
+    SRC_WORK_TREE="$(cd -- "$SRC_WORK_TREE" && pwd -P)"
 } || {
-    echo "'CURRENT_WORK_TREE' is not set"
+    echo "'SRC_WORK_TREE' is not set"
     exit 1
 }
 
-test -e "${NEW_WORK_TREE:="${CURRENT_WORK_TREE}_editgit"}" && {
-    test -d "$NEW_WORK_TREE" || {
-        echo "is not a directory: '$NEW_WORK_TREE'"
+test -e "${TRG_WORK_TREE:="${SRC_WORK_TREE}_editgit"}" && {
+    test -d "$TRG_WORK_TREE" || {
+        echo "is not a directory: '$TRG_WORK_TREE'"
         exit 2
     }
 } || {
-    mkdir -vp -- "$NEW_WORK_TREE"
-} && NEW_WORK_TREE="$(cd -- "$NEW_WORK_TREE" && pwd -P)" || exit 2
+    mkdir -vp -- "$TRG_WORK_TREE"
+} && TRG_WORK_TREE="$(cd -- "$TRG_WORK_TREE" && pwd -P)" || exit 2
 
-git init "$NEW_WORK_TREE"
+git init "$TRG_WORK_TREE"
 
 exec_git () {
     WORK_TREE="$1"
@@ -84,38 +84,38 @@ exec_cp ()
 
 copy ()
 {
-    for i in "$CURRENT_WORK_TREE"/.*
+    for i in "$SRC_WORK_TREE"/.*
     do
         test -e "$i" &&
         case "$i" in
             */.|*/..|*/.git)
                 ;;
             *)
-                exec_cp "$i" "$NEW_WORK_TREE/"
+                exec_cp "$i" "$TRG_WORK_TREE/"
         esac
     done
 
-    for i in "$CURRENT_WORK_TREE"/*
+    for i in "$SRC_WORK_TREE"/*
     do
-        test -e "$i" && exec_cp "$i" "$NEW_WORK_TREE/"
+        test -e "$i" && exec_cp "$i" "$TRG_WORK_TREE/"
     done
 }
 
 get_commit ()
 {
-      AUTOR_NAME="$(exec_git "$CURRENT_WORK_TREE" show -s --format=%an "$COMMIT")"
-     AUTOR_EMAIL="$(exec_git "$CURRENT_WORK_TREE" show -s --format=%ae "$COMMIT")"
-      AUTOR_DATE="$(exec_git "$CURRENT_WORK_TREE" show -s --format=%ad "$COMMIT")"
+      AUTOR_NAME="$(exec_git "$SRC_WORK_TREE" show -s --format=%an "$COMMIT")"
+     AUTOR_EMAIL="$(exec_git "$SRC_WORK_TREE" show -s --format=%ae "$COMMIT")"
+      AUTOR_DATE="$(exec_git "$SRC_WORK_TREE" show -s --format=%ad "$COMMIT")"
       AUTOR_DATE="${AUTOR_DATE#*[[:blank:]]} ${AUTOR_DATE%[[:blank:]]*}"
-         SUBJECT="$(exec_git "$CURRENT_WORK_TREE" show -s --format=%s  "$COMMIT")"
-     COMMIT_BODY="$(exec_git "$CURRENT_WORK_TREE" show -s --format=%b  "$COMMIT")"
+         SUBJECT="$(exec_git "$SRC_WORK_TREE" show -s --format=%s  "$COMMIT")"
+     COMMIT_BODY="$(exec_git "$SRC_WORK_TREE" show -s --format=%b  "$COMMIT")"
 
     test -z "${COMMIT_BODY:-}" ||
     COMMIT_BODY="$(echo "$COMMIT_BODY" | \
         sed '/^Signed-off-by:/d' | \
         sed -e :a -e '/^\n*$/{$d;N;ba' -e '}')"
 
-    GPG="$(exec_git "$CURRENT_WORK_TREE" show -s --format=%GG "$COMMIT")"
+    GPG="$(exec_git "$SRC_WORK_TREE" show -s --format=%GG "$COMMIT")"
     test -z "${GPG:-}" || {
         GPG_DATE="$(echo    "$GPG"      | head -1)"
         GPG_DATE="$(echo    "$GPG_DATE" | cut -d' ' -f4-9)"
@@ -135,15 +135,15 @@ ntp_service ()
 
 ntp_service 0
 
-get_list_commit "$CURRENT_WORK_TREE" | tac | while read -r COMMIT
+get_list_commit "$SRC_WORK_TREE" | tac | while read -r COMMIT
 do
     echo "commit: $COMMIT"
-    exec_git "$CURRENT_WORK_TREE" reset --hard "$COMMIT"
+    exec_git "$SRC_WORK_TREE" reset --hard "$COMMIT"
     get_commit
     copy
     set_commit_date
-    exec_git "$NEW_WORK_TREE" add -A
-    exec_git "$NEW_WORK_TREE" commit -sm "$SUBJECT"
+    exec_git "$TRG_WORK_TREE" add -A
+    exec_git "$TRG_WORK_TREE" commit -sm "$SUBJECT"
 done
 
 ntp_service 1
