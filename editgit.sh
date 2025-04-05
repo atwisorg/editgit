@@ -18,6 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+PKG="${0##*/}"
+
 usage () {
     echo "Usage: $PKG [OPTION] [-s] <path> [[-t] <path>]"
 }
@@ -48,7 +50,7 @@ $PKG home page: <https://www.atwis.org/shell-script/$PKG/>"
 }
 
 show_version () {
-    echo "${0##*/} ${1:-0.0.1} - (C) 05.04.2025
+    echo "${0##*/} ${1:-0.0.2} - (C) 05.04.2025
 
 Written by Mironov A Semyon
 Site       www.atwis.org
@@ -122,34 +124,6 @@ is_dir () {
 is_exists () {
     test -e "${1:-}"
 }
-
-full_path () {
-    FULL_PATH="$1"
-    case "${FULL_PATH:-}" in
-        \~   )  FULL_PATH="${HOME%/}"                                 ;;
-        \~/* )  FULL_PATH="${HOME%/}/${FULL_PATH#?}"                  ;;
-         ./* )  is_equal "$PWD" "/" && FULL_PATH="${FULL_PATH#?}"     \
-                                    || FULL_PATH="$PWD${FULL_PATH#?}" ;;
-        [!/]*)  is_equal "$PWD" "/" && FULL_PATH="/$FULL_PATH"        \
-                                    || FULL_PATH="$PWD/$FULL_PATH"
-    esac
-    ARG="${FULL_PATH:-}"
-    FULL_PATH=
-    while is_not_empty "${ARG:-}"
-    do
-        DIR="${ARG%%/*}"
-        case "${DIR:-}" in
-            . ) :;;
-            '') DIR="${ARG%%[!/]*}"   ;;
-            ..) FULL_PATH="${FULL_PATH%/*}" ;;
-            * ) FULL_PATH="${FULL_PATH%/}/$DIR"
-        esac
-        ARG="${ARG#$DIR}"
-        FULL_PATH="${FULL_PATH:=/}"
-    done
-}
-
-PKG="${0##*/}"
 
 arg_is_not_empty () {
     is_not_empty "${2:-}"  || {
@@ -242,7 +216,8 @@ arg_parse () {
 
 check_args ()
 {
-    is_not_empty "${SRC_WORK_TREE:-}" || die "'SRC_WORK_TREE' is not set"
+    is_not_empty "${SRC_WORK_TREE:="${GIT_WORK_TREE:-}"}" ||
+        try 2 "'SRC_WORK_TREE' is not set"
     SRC_WORK_TREE="$(cd -- "$SRC_WORK_TREE" 2>&1 && pwd -P 2>&1)" ||
         die "$SRC_WORK_TREE"
 
@@ -252,6 +227,8 @@ check_args ()
 
     TRG_WORK_TREE="$(cd -- "$TRG_WORK_TREE" 2>&1 && pwd -P 2>&1)" ||
         die "$TRG_WORK_TREE"
+
+    unset -v "GIT_WORK_TREE"
 }
 
 main ()
