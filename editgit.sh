@@ -101,37 +101,30 @@ copy ()
     done
 }
 
-get_commit_body ()
+get_commit ()
 {
-    COMMIT_BODY="$(exec_git "$CURRENT_WORK_TREE" show "$COMMIT")"
-}
+      AUTOR_NAME="$(exec_git "$CURRENT_WORK_TREE" show -s --format=%an "$COMMIT")"
+     AUTOR_EMAIL="$(exec_git "$CURRENT_WORK_TREE" show -s --format=%ae "$COMMIT")"
+      AUTOR_DATE="$(exec_git "$CURRENT_WORK_TREE" show -s --format=%ad "$COMMIT")"
+      AUTOR_DATE="${AUTOR_DATE#*[[:blank:]]} ${AUTOR_DATE%[[:blank:]]*}"
+         SUBJECT="$(exec_git "$CURRENT_WORK_TREE" show -s --format=%s  "$COMMIT")"
+     COMMIT_BODY="$(exec_git "$CURRENT_WORK_TREE" show -s --format=%b  "$COMMIT")"
 
-get_commit_date ()
-{
-    DATE="$(echo "$COMMIT_BODY" | grep -m1 '^Date:')"
-    DATE="${DATE#*[[:blank:]]}"
-    DATE="${DATE#*"${DATE%%[![:blank:]]*}"}"
-    TIME="${DATE%%[[:blank:]]*}"
-    DATE="${DATE##*[[:blank:]]}"
-    echo "DATE: $DATE"
-    echo "TIME: $TIME"
-}
+    test -z "${COMMIT_BODY:-}" ||
+    COMMIT_BODY="$(echo "$COMMIT_BODY" | \
+        sed '/^Signed-off-by:/d' | \
+        sed -e :a -e '/^\n*$/{$d;N;ba' -e '}')"
 
-get_commit_message ()
-{
-    COMMIT_MESSAGE="$(echo "$COMMIT_BODY" | \
-    sed -n '/^Date:/,/^\([[:cntrl:]]\[[0-9;]\+m\)*diff/p' | \
-    sed '1,2d; $d' | sed '$d' | sed 's/^ \{4\}//')"
-    COMMIT_TITLE="$(echo "$COMMIT_MESSAGE" | head -1)"
-    COMMIT_MESSAGE="$(echo "$COMMIT_MESSAGE" | sed '1,2d')"
-    COMMIT_MESSAGE="$(echo "$COMMIT_MESSAGE" | sed '/^Signed-off-by/d')"
-    echo "COMMIT_TITLE: $COMMIT_TITLE"
-    echo "COMMIT_MESSAGE: $COMMIT_MESSAGE"
+    GPG="$(exec_git "$CURRENT_WORK_TREE" show -s --format=%GG "$COMMIT")"
+    test -z "${GPG:-}" || {
+        GPG_DATE="$(echo "$GPG" | head -1)"
+        GPG_DATE="$(echo "$GPG" | cut -d' ' -f4-)"
+    }
 }
 
 set_commit_date ()
 {
-    timedatectl set-time "$DATE $TIME"
+    timedatectl set-time "$AUTOR_DATE"
 }
 
 ntp_service ()
@@ -145,13 +138,11 @@ get_list_commit "$CURRENT_WORK_TREE" | tac | while read -r COMMIT
 do
     echo "commit: $COMMIT"
     exec_git "$CURRENT_WORK_TREE" reset --hard "$COMMIT"
-    get_commit_body
-    get_commit_date
-    get_commit_message
+    get_commit
     copy
     set_commit_date
     exec_git "$NEW_WORK_TREE" add -A
-    exec_git "$NEW_WORK_TREE" commit -sm "$COMMIT_TITLE"
+    exec_git "$NEW_WORK_TREE" commit -sm "$SUBJECT"
 done
 
 ntp_service 1
