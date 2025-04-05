@@ -84,38 +84,38 @@ exec_cp ()
 
 copy ()
 {
-    for i in "$SRC_WORK_TREE"/.*
+    for i in "$1"/.*
     do
         test -e "$i" &&
         case "$i" in
             */.|*/..|*/.git)
                 ;;
             *)
-                exec_cp "$i" "$TRG_WORK_TREE/"
+                exec_cp "$i" "$2/"
         esac
     done
 
-    for i in "$SRC_WORK_TREE"/*
+    for i in "$1"/*
     do
-        test -e "$i" && exec_cp "$i" "$TRG_WORK_TREE/"
+        test -e "$i" && exec_cp "$i" "$2/"
     done
 }
 
 get_commit ()
 {
-      AUTOR_NAME="$(exec_git "$SRC_WORK_TREE" show -s --format=%an "$COMMIT")"
-     AUTOR_EMAIL="$(exec_git "$SRC_WORK_TREE" show -s --format=%ae "$COMMIT")"
-      AUTOR_DATE="$(exec_git "$SRC_WORK_TREE" show -s --format=%ad "$COMMIT")"
-      AUTOR_DATE="${AUTOR_DATE#*[[:blank:]]} ${AUTOR_DATE%[[:blank:]]*}"
-         SUBJECT="$(exec_git "$SRC_WORK_TREE" show -s --format=%s  "$COMMIT")"
-     COMMIT_BODY="$(exec_git "$SRC_WORK_TREE" show -s --format=%b  "$COMMIT")"
+     GIT_AUTHOR_NAME="$(exec_git "$SRC_WORK_TREE" show -s --format=%an "$1")"
+    GIT_AUTHOR_EMAIL="$(exec_git "$SRC_WORK_TREE" show -s --format=%ae "$1")"
+     GIT_AUTHOR_DATE="$(exec_git "$SRC_WORK_TREE" show -s --format=%ad "$1")"
+     GIT_AUTHOR_DATE="$(date -d "$GIT_AUTHOR_DATE" --rfc-2822)"
+             SUBJECT="$(exec_git "$SRC_WORK_TREE" show -s --format=%s  "$1")"
+         COMMIT_BODY="$(exec_git "$SRC_WORK_TREE" show -s --format=%b  "$1")"
 
     test -z "${COMMIT_BODY:-}" ||
     COMMIT_BODY="$(echo "$COMMIT_BODY" | \
         sed '/^Signed-off-by:/d' | \
         sed -e :a -e '/^\n*$/{$d;N;ba' -e '}')"
 
-    GPG="$(exec_git "$SRC_WORK_TREE" show -s --format=%GG "$COMMIT")"
+    GPG="$(exec_git "$SRC_WORK_TREE" show -s --format=%GG "$1")"
     test -z "${GPG:-}" || {
         GPG_DATE="$(echo    "$GPG"      | head -1)"
         GPG_DATE="$(echo    "$GPG_DATE" | cut -d' ' -f4-9)"
@@ -123,9 +123,18 @@ get_commit ()
     }
 }
 
-set_commit_date ()
+puts_commit_message ()
 {
-    timedatectl set-time "$AUTOR_DATE"
+    echo "$SUBJECT"
+    test -z "${COMMIT_BODY:-}" || {
+        echo ""
+        echo "$COMMIT_BODY"
+    }
+}
+
+set_date ()
+{
+    timedatectl set-time "$1"
 }
 
 ntp_service ()
@@ -133,17 +142,26 @@ ntp_service ()
     timedatectl set-ntp "$1"
 }
 
+git_commit ()
+{
+    exec_git "$1" add -A
+    export GIT_COMMITTER_DATE="$GIT_AUTHOR_DATE"
+    export GIT_AUTHOR_DATE="$GIT_AUTHOR_DATE"
+    puts_commit_message | exec_git "$1" commit -s -F -
+}
+
 ntp_service 0
 
 get_list_commit "$SRC_WORK_TREE" | tac | while read -r COMMIT
 do
-    echo "commit: $COMMIT"
-    exec_git "$SRC_WORK_TREE" reset --hard "$COMMIT"
-    get_commit
-    copy
-    set_commit_date
-    exec_git "$TRG_WORK_TREE" add -A
-    exec_git "$TRG_WORK_TREE" commit -sm "$SUBJECT"
+    (
+        echo "commit: $COMMIT"
+        exec_git "$SRC_WORK_TREE" reset --hard "$COMMIT"
+        get_commit "$COMMIT"
+        copy       "$SRC_WORK_TREE" "$TRG_WORK_TREE"
+        set_date   "$GPG_DATE"
+        git_commit "$TRG_WORK_TREE"
+    )
 done
 
 ntp_service 1
